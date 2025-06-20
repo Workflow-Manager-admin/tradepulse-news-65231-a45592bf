@@ -3,7 +3,7 @@ import './App.css';
 import { fetchNewsByCountry } from './newsApi';
 import { fetchUsdToCurrencyRate } from './forexApi';
 
-// Supported countries, expand as needed (code: ISO 2-letter, name: display name, currency: ISO 3-letter)
+// Supported countries (expand as needed)
 const COUNTRY_LIST = [
   { code: 'us', name: 'United States', currency: 'USD' },
   { code: 'in', name: 'India', currency: 'INR' },
@@ -13,8 +13,7 @@ const COUNTRY_LIST = [
   { code: 'au', name: 'Australia', currency: 'AUD' },
   { code: 'fr', name: 'France', currency: 'EUR' },
 ];
-
-// Supported currency selection for demo: choose based on country or manually
+// Supported currencies for selection
 const SUPPORTED_CURRENCIES = [
   { code: 'USD', name: 'US Dollar' },
   { code: 'INR', name: 'Indian Rupee' },
@@ -27,28 +26,42 @@ const SUPPORTED_CURRENCIES = [
   { code: 'CHF', name: 'Swiss Franc' },
 ];
 
-// Lists a basic subset for demo simplicity
+const NEWS_CATEGORIES = [
+  { key: '', label: 'All' },
+  { key: 'economy', label: 'Economy' },
+  { key: 'business', label: 'Business' },
+  { key: 'crypto', label: 'Crypto' },
+  { key: 'technology', label: 'Technology' },
+  { key: 'markets', label: 'Markets' },
+];
+
 function App() {
+  // State management
   const [country, setCountry] = useState('us');
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [totalResults, setTotalResults] = useState(0);
-
-  // Forex states
   const [selectedCurrency, setSelectedCurrency] = useState('USD');
   const [exchangeRate, setExchangeRate] = useState(null);
   const [forexLoading, setForexLoading] = useState(false);
   const [forexError, setForexError] = useState('');
+  const [category, setCategory] = useState('');
+  const [categoryTouched, setCategoryTouched] = useState(false);
 
-  // Automatically switch currency when country changes, unless already manually changed
+  // UX: indicate during async actions, if filter in progress
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Switch currency with country unless manual change
   useEffect(() => {
-    const found = COUNTRY_LIST.find(c => c.code === country);
-    if (found) setSelectedCurrency(found.currency);
+    if (!categoryTouched) {
+      const found = COUNTRY_LIST.find(c => c.code === country);
+      if (found) setSelectedCurrency(found.currency);
+    }
     // eslint-disable-next-line
   }, [country]);
 
-  // Fetch news whenever country changes
+  // Fetch news on country or category change
   useEffect(() => {
     let ignore = false;
     async function getNews() {
@@ -56,7 +69,7 @@ function App() {
       setError('');
       setNews([]);
       setTotalResults(0);
-      const response = await fetchNewsByCountry(country);
+      const response = await fetchNewsByCountry(country, category);
       if (!ignore) {
         if (response.error) setError(response.error);
         else {
@@ -68,12 +81,11 @@ function App() {
     }
     getNews();
     return () => { ignore = true; };
-  }, [country]);
+  }, [country, category]);
 
-  // Fetch forex rate whenever selectedCurrency changes
+  // Fetch forex conversion on currency selection
   useEffect(() => {
     let ignore = false;
-    // Don't fetch if USD (rate will always be 1.0)
     async function getForex() {
       setForexLoading(true);
       setForexError('');
@@ -95,151 +107,186 @@ function App() {
   }, [selectedCurrency]);
 
   // PUBLIC_INTERFACE
-  /**
-   * Handles changing the selected country.
-   * @param {Event} event 
-   */
+  /** Handles changing the selected country. */
   function handleCountryChange(event) {
     setCountry(event.target.value);
+    setCategory(''); // reset category on country change
+    setError('');
+    setLoading(false);
   }
 
   // PUBLIC_INTERFACE
-  /**
-   * Handles changing the selected target currency.
-   * @param {Event} e 
-   */
+  /** Handles changing the selected currency. */
   function handleCurrencyChange(e) {
     setSelectedCurrency(e.target.value);
+    setCategoryTouched(true);
+  }
+
+  // PUBLIC_INTERFACE
+  /** Handles changing news category filter. */
+  function handleCategoryChange(e) {
+    setCategory(e.target.value);
+    setFiltersOpen(false);
+  }
+
+  // UI/UX: helpers for feedback
+  function Loader({ text }) {
+    return (
+      <div className="loader">
+        <span className="spinner" /> {text}
+      </div>
+    );
+  }
+  function ErrorMessage({ error }) {
+    return (
+      <div className="error-message">
+        <span role="img" aria-label="error" style={{marginRight:4}}>⚠️</span>{error}
+      </div>
+    );
   }
 
   return (
-    <div className="app">
-      <nav className="navbar">
-        <div className="container">
-          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-            <div className="logo">
-              <span className="logo-symbol">*</span> KAVIA AI
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <select
-                value={country}
-                className="btn"
-                style={{ background: 'var(--base-light)', color: '#222', fontWeight: 500, marginRight: '1rem' }}
-                onChange={handleCountryChange}
-                data-testid="country-select"
-              >
-                {COUNTRY_LIST.map((c) => (
-                  <option key={c.code} value={c.code}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={selectedCurrency}
-                className="btn"
-                style={{ background: 'var(--base-light)', color: '#222', fontWeight: 500 }}
-                onChange={handleCurrencyChange}
-                data-testid="currency-select"
-              >
-                {SUPPORTED_CURRENCIES.map((cu) => (
-                  <option key={cu.code} value={cu.code}>
-                    {cu.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+    <div className="app light-theme">
+      <nav className="navbar" aria-label="Header Navigation">
+        <div className="container nav-inner">
+          <div className="logo">
+            <span className="logo-symbol">*</span>
+            <span className="logo-text">TradePulse</span>
+            <span className="logo-dot">.</span>
+            <span className="logo-sub brand-accent">News</span>
+          </div>
+          <div className="selectors-area">
+            <label htmlFor="country-select" className="selector-label">Country</label>
+            <select
+              id="country-select"
+              value={country}
+              className="selector"
+              onChange={handleCountryChange}
+              data-testid="country-select"
+              aria-label="Select Country"
+            >
+              {COUNTRY_LIST.map((c) => (
+                <option key={c.code} value={c.code}>{c.name}</option>
+              ))}
+            </select>
+            <label htmlFor="currency-select" className="selector-label">Currency</label>
+            <select
+              id="currency-select"
+              value={selectedCurrency}
+              className="selector"
+              onChange={handleCurrencyChange}
+              data-testid="currency-select"
+              aria-label="Select Currency"
+            >
+              {SUPPORTED_CURRENCIES.map((cu) => (
+                <option key={cu.code} value={cu.code}>{cu.name}</option>
+              ))}
+            </select>
           </div>
         </div>
       </nav>
-
       <main>
-        <div className="container">
-          {/* Forex Rate Section */}
-          <div style={{
-            marginTop: 80,
-            marginBottom: 32,
-            padding: '18px 12px',
-            border: '1px solid var(--border-color)',
-            borderRadius: 5,
-            maxWidth: 430,
-            background: 'rgba(255,255,255,0.06)',
-          }}>
-            <div style={{ fontWeight: 500, marginBottom: 4, color: 'var(--base-light)' }}>
-              USD to {selectedCurrency} Exchange Rate
+        <div className="container main-sections">
+          {/* Filters */}
+          <section className="filters-section">
+            <button
+              className="btn-filter"
+              aria-label="Toggle News Filters"
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+              data-testid="filter-toggle"
+            >
+              <span className="icon-filter" /> {filtersOpen ? "Hide Filters" : "Show Filters"}
+            </button>
+            {filtersOpen || (window.innerWidth > 700) ? (
+              <div className="filters-list" data-testid="filter-list">
+                <span className="filter-label">Category:</span>
+                <select
+                  className="selector filter-selector"
+                  value={category}
+                  onChange={handleCategoryChange}
+                  data-testid="category-select"
+                  aria-label="Select News Category"
+                >
+                  {NEWS_CATEGORIES.map(cat =>
+                    <option key={cat.key} value={cat.key}>{cat.label}</option>
+                  )}
+                </select>
+              </div>
+            ) : null}
+          </section>
+          {/* Forex Section */}
+          <section className="forex-section" aria-label="Forex Exchange Rate">
+            <div className="forex-header">
+              <span className="forex-title">USD to {selectedCurrency}</span>
             </div>
-            {forexLoading && (
-              <div style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>Loading rate...</div>
-            )}
-            {forexError && (
-              <div style={{ color: '#ff6565', fontWeight: 500 }}>
-                Error: {forexError}
+            <div className="forex-details">
+              {forexLoading ? (
+                <Loader text="Loading exchange rate..." />
+              ) : forexError ? (
+                <ErrorMessage error={forexError} />
+              ) : (
+                <div className="forex-rate-value">
+                  1 USD = {exchangeRate ? exchangeRate.toLocaleString(undefined, { maximumFractionDigits: 4 }) : "--"} {selectedCurrency}
+                </div>
+              )}
+              <div className="forex-provider">
+                Powered by{' '}
+                <a href="https://www.exchangerate-api.com/" target="_blank" rel="noopener noreferrer" className="brand-accent-link">
+                  ExchangeRate-API
+                </a>
               </div>
-            )}
-            {!forexLoading && !forexError && exchangeRate !== null && (
-              <div style={{ fontSize: '2.3rem', fontWeight: 600, color: '#fff', marginBottom: 6 }}>
-                1 USD = {exchangeRate.toLocaleString(undefined, { maximumFractionDigits: 4 })} {selectedCurrency}
-              </div>
-            )}
-            <div style={{ fontSize: '0.96rem', color: 'var(--text-secondary)' }}>
-              Powered by <a href="https://www.exchangerate-api.com/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--base-light)' }}>ExchangeRate-API</a>
             </div>
-          </div>
-
-          <div className="hero" style={{ alignItems: 'stretch' }}>
-            <div className="subtitle">TradePulse News - Country: <span style={{ color: 'var(--base-light)' }}>{COUNTRY_LIST.find(c => c.code===country)?.name || country}</span></div>
-            <h1 className="title">Latest Headlines</h1>
-
-            {loading && <div className="description">Loading news...</div>}
-            {error && (
-              <div className="description" style={{ color: '#ff6565', fontWeight: 500 }}>
-                Error: {error}
-              </div>
-            )}
-            {!loading && !error && (
-              <React.Fragment>
-                {news && news.length > 0 ? (
-                  <>
-                    <div className="description" style={{ marginBottom: '16px' }}>
-                      Showing {news.length} of {totalResults} articles.
-                    </div>
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                      {news.map((article, idx) => (
-                        <li key={article.link || idx} style={{
-                          border: '1px solid var(--border-color)',
-                          borderRadius: 4,
-                          padding: 18,
-                          marginBottom: 16,
-                          background: 'rgba(255,255,255,0.03)'
-                        }}>
-                          <div style={{ fontWeight: 600, fontSize: '1.13rem', marginBottom: 6 }}>
-                            {article.title}
-                          </div>
-                          {article.pubDate && (
-                            <span style={{ fontSize: '0.95rem', color: 'var(--text-secondary)' }}>
-                              {new Date(article.pubDate).toLocaleString()}
-                            </span>
-                          )}
-                          <div style={{ margin: '8px 0' }}>
-                            {article.description?.length > 300
-                              ? article.description.slice(0, 300).trim() + '...'
-                              : article.description || <em>No summary</em>}
-                          </div>
-                          {article.link && (
-                            <a href={article.link} target="_blank" rel="noopener noreferrer"
-                               style={{ color: 'var(--base-light)', textDecoration: 'underline' }}>
-                              Read Full Article
-                            </a>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
+          </section>
+          {/* News Section */}
+          <section className="news-section">
+            <header className="news-header">
+              <span className="subtitle">
+                Latest Headlines, {COUNTRY_LIST.find(c => c.code === country)?.name}
+                {category ? " - " + NEWS_CATEGORIES.find(cat => cat.key === category)?.label : ""}
+              </span>
+              <h1 className="title">TradePulse News</h1>
+            </header>
+            <div className="news-content">
+              {loading ? (
+                <Loader text="Loading news..." />
+              ) : error ? (
+                <ErrorMessage error={error} />
+              ) : (
+                <>
+                <div className="news-summary">
+                  Showing <b>{news.length}</b> of <b>{totalResults}</b> articles.
+                </div>
+                {news.length === 0 && (
                   <div className="description" style={{ color: 'var(--text-secondary)' }}>No news articles found.</div>
                 )}
-              </React.Fragment>
-            )}
-          </div>
+                <ul className="articles-list">
+                  {news.map((article, idx) => (
+                    <li className="news-article" key={article.link || idx}>
+                      <div className="article-title">{article.title}</div>
+                      {article.pubDate && (
+                        <span className="article-date">
+                          {new Date(article.pubDate).toLocaleString()}
+                        </span>
+                      )}
+                      <div className="article-description">
+                        {article.description?.length > 300
+                          ? article.description.slice(0, 300).trim() + '...'
+                          : article.description || <em>No summary</em>}
+                      </div>
+                      {article.link && (
+                        <a href={article.link} target="_blank" rel="noopener noreferrer"
+                          className="article-link">
+                          Read Full Article
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                </>
+              )}
+            </div>
+          </section>
         </div>
       </main>
     </div>
