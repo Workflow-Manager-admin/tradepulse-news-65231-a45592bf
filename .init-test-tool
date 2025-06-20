@@ -1,0 +1,4 @@
+{
+    "command": "npm run test",
+    "working_directory": "/home/kavia/workspace/code-generation/tradepulse-news-65231-a45592bf/tradepulse_news"
+}
